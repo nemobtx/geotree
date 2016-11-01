@@ -18,6 +18,10 @@ target_link_libraries(calibrate_camera_intrinsics theia ${GFLAGS_LIBRARIES} ${GL
 add_executable(undistort_images undistort_images.cc)
 target_link_libraries(undistort_images theia ${GFLAGS_LIBRARIES} ${GLOG_LIBRARIES})
 
+# Customized tools for building SfM models
+add_executable(all_in_one all_in_one.cc)
+target_link_libraries(all_in_one theia ${GFLAGS_LIBRARIES} ${GLOG_LIBRARIES})
+
 # Reconstruction visualization.
 find_package(OpenGL REQUIRED)
 if (NOT MSVC)
