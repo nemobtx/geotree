@@ -1,0 +1,10 @@
+level 2
+csize 2
+threshold 0.7
+wsize 7
+minImageNum 3
+CPU 4
+useVisData 1
+sequence -1
+timages -1 0 31
+oimages 0
