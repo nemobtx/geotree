@@ -1,22 +1,20 @@
 ############### Input/Output ###############
 # Input/output files and directories
 # In case of a directory, must contain a trailing slash.
-# images e.g., /home/my_username/my_images/*.jpg
 # images_directory e.g., /home/my_username/my_images/
-# output_reconstruction e.g., /path/to/sparse
-# output_reconstruction_with_color e.g., /path/to/sparse-color
+# images_extension e.g., jpg, JPG, png, PNG, bmp, BMP, ...
 # output_directory e.g., /path/to/
---images=
+# output_reconstruction e.g., sparse-pd (only name)
 --images_directory=
---output_reconstruction=
---output_reconstruction_with_color=
+--images_extension=
 --output_directory=
+--output_reconstruction=
 
 # If a matches file has already been created, set the filepath here. This avoids
 # having to recompute all features and matches.
 --matches_file=
-# Set these if a matches file is not present.
---output_matches_file
+# Set these if a matches file is not present. e.g., twoview-infos (only name)
+--output_matches_file=
 
 # The calibration file indicates possibly known calibration e.g, from EXIF or
 # explicit calibration. Theia attempts to extract EXIF focal lengths if calibration
@@ -27,6 +25,12 @@
 # Minimum number of observations for a point to be written out to the PLY file.
 # This helps reduce noise in the resulty PLY file.
 --min_num_observations_per_point=1
+
+############### PMVS Options ###############
+--level=1
+--csize=2
+--minImageNum=3
+--CPU=4
 
 ############### Multithreading ###############
 # Set to the number of threads you want to use.
@@ -44,7 +48,7 @@
 
 # During feature matching, features are saved to disk so that out-of-core
 # matching may be performed. This directory specifies which directory those
-# features should be saved to.
+# features should be saved to. e.g., $output_directory/features/
 --matching_working_directory=
 
 # During feature matching we utilize an LRU cache for out-of-core matching. The size

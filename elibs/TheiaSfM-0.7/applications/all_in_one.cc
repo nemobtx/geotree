@@ -4,26 +4,22 @@
 #include <time.h>
 #include <theia/theia.h>
 #include <chrono>  // NOLINT
+#include <fstream>
 #include <string>
 #include <vector>
 
 #include "applications/command_line_helpers.h"
 
 // Input/output files and directories.
-DEFINE_string(images, "", "Wildcard of images to reconstruct.");
 DEFINE_string(images_directory, "",
-              "Full path to the directory containing the images.");
+              "A directory to containing the images.");
+DEFINE_string(images_extension, "", "An extension of the images");
+DEFINE_string(output_directory, "",
+              "A directory to store various results.");
 DEFINE_string(
     output_reconstruction, "",
     "Filename to write reconstruction to. The filename will be appended with "
     "the reconstruction number if multiple reconstructions are created.");
-DEFINE_string(
-    output_reconstruction_with_color, "",
-    "Filename to write colorized reconstruction to. The filename will be "
-    "appended with the reconstruction number if multiple colorized "
-    "reconstructions are created.");
-DEFINE_string(output_directory, "",
-              "Full path to the directory containing the outputs.");
 DEFINE_string(matches_file, "", "Filename of the matches file.");
 DEFINE_string(
     output_matches_file, "",
@@ -33,10 +29,23 @@ DEFINE_string(
 DEFINE_string(calibration_file, "",
               "Calibration file containing image calibration data.");
 
-// PLY
+// PLY option.
 DEFINE_int32(min_num_observations_per_point, 1,
              "Minimum number of observations for a point to be written out to "
              "the PLY file. This helps reduce noise in the resulty PLY file.");
+
+/// PMVS options.
+DEFINE_int32(level, 1,
+             "A level in an image pyramid that is used for the computation. "
+             "When level is 0, original (full) resolution images are used. "
+             "When level is 1, images are halved (or 4 times less pixels).");
+DEFINE_int32(csize, 2,
+             "Cell size to control the density of reconstruction. Increasing "
+             "the value leads to sparser reconstruction.");
+DEFINE_int32(minImageNum, 3,
+             "Minimum number of iamges that each 3D point must be visible "
+             "for being reconstructed. 3 is suggested in general.");
+DEFINE_int32(CPU, 4, "Number of threads to use in PMVS.");
 
 // Multithreading.
 DEFINE_int32(num_threads, 1,
@@ -187,9 +196,17 @@ using theia::ReconstructionBuilderOptions;
 ReconstructionBuilderOptions SetReconstructionBuilderOptions() {
   ReconstructionBuilderOptions options;
 
-  options.num_threads = FLAGS_num_threads;
-  options.output_matches_file = FLAGS_output_matches_file;
+  const std::string output_matches_directory =
+      FLAGS_output_directory + "matches/";
+  if (!theia::DirectoryExists(output_matches_directory)) {
+    CHECK(theia::CreateNewDirectory(output_matches_directory))
+        << "Could not create the directory: " << output_matches_directory;
+  }
 
+  options.num_threads = FLAGS_num_threads;
+  options.output_matches_file =
+      output_matches_directory + FLAGS_output_matches_file;
+  
   options.descriptor_type = StringToDescriptorExtractorType(FLAGS_descriptor);
   options.feature_density = StringToFeatureDensity(FLAGS_feature_density);
   options.matching_options.match_out_of_core = FLAGS_match_out_of_core;
@@ -328,12 +345,16 @@ void AddMatchesToReconstructionBuilder(
 
 void AddImagesToReconstructionBuilder(
     ReconstructionBuilder* reconstruction_builder) {
+  const std::string filepath_with_wildcard =
+      FLAGS_images_directory + "*." + FLAGS_images_extension;
   std::vector<std::string> image_files;
-  CHECK(theia::GetFilepathsFromWildcard(FLAGS_images, &image_files))
-      << "Could not find images that matched the filepath: " << FLAGS_images
+  CHECK(theia::GetFilepathsFromWildcard(filepath_with_wildcard, &image_files))
+      << "Could not find images that matched the filepath: "
+      << filepath_with_wildcard
       << ". NOTE that the ~ filepath is not supported.";
 
-  CHECK_GT(image_files.size(), 0) << "No images found in: " << FLAGS_images;
+  CHECK_GT(image_files.size(), 0)
+      << "No images found in: " << filepath_with_wildcard;
 
   // Load calibration file if it is provided.
   std::unordered_map<std::string, theia::CameraIntrinsicsPrior>
@@ -371,21 +392,109 @@ void AddImagesToReconstructionBuilder(
   CHECK(reconstruction_builder->ExtractAndMatchFeatures());
 }
 
+void CreateDirectoryIfDoesNotExist(const std::string& directory) {
+  if (!theia::DirectoryExists(directory)) {
+    CHECK(theia::CreateNewDirectory(directory))
+        << "Could not create the directory: " << directory;
+  }
+}
+
+int WriteCamerasToPMVS(const theia::Reconstruction& reconstruction,
+                       const std::string& working_dir) {
+  const std::string filepath_with_wildcard =
+      FLAGS_images_directory + "*." + FLAGS_images_extension;
+  const std::string txt_dir = working_dir + "/txt";
+  CreateDirectoryIfDoesNotExist(txt_dir);
+  const std::string visualize_dir = working_dir + "/visualize";
+
+  std::vector<std::string> image_files;
+  CHECK(theia::GetFilepathsFromWildcard(filepath_with_wildcard, &image_files))
+      << "Could not find images that matched the filepath: "
+      << filepath_with_wildcard
+      << ". NOTE that the ~ filepath is not supported.";
+  CHECK_GT(image_files.size(), 0)
+      << "No images found in: " << filepath_with_wildcard;
+
+  // Format for printing eigen matrices.
+  const Eigen::IOFormat unaligned(Eigen::StreamPrecision, Eigen::DontAlignCols);
+
+  int current_image_index = 0;
+  for (int i = 0; i < image_files.size(); i++) {
+    std::string image_name;
+    CHECK(theia::GetFilenameFromFilepath(image_files[i], true, &image_name));
+    const theia::ViewId view_id = reconstruction.ViewIdFromName(image_name);
+    if (view_id == theia::kInvalidViewId) {
+      continue;
+    }
+
+    LOG(INFO) << "Undistorting image " << image_name;
+    const theia::Camera& distorted_camera =
+        reconstruction.View(view_id)->Camera();
+    theia::Camera undistorted_camera;
+    CHECK(theia::UndistortCamera(distorted_camera, &undistorted_camera));
+
+    theia::FloatImage distorted_image(image_files[i]);
+    theia::FloatImage undistorted_image;
+    CHECK(theia::UndistortImage(distorted_camera,
+                                distorted_image,
+                                undistorted_camera,
+                                &undistorted_image));
+
+    LOG(INFO) << "Exporting parameters for image: " << image_name;
+
+    // Copy the image into a jpeg format with the filename in the form of
+    // %08d.jpg.
+    const std::string new_image_file = theia::StringPrintf(
+        "%s/%08d.jpg", visualize_dir.c_str(), current_image_index);
+    undistorted_image.Write(new_image_file);
+
+    // Write the camera projection matrix.
+    const std::string txt_file = theia::StringPrintf(
+        "%s/%08d.txt", txt_dir.c_str(), current_image_index);
+    theia::Matrix3x4d projection_matrix;
+    undistorted_camera.GetProjectionMatrix(&projection_matrix);
+    std::ofstream ofs(txt_file);
+    ofs << "CONTOUR" << std::endl;
+    ofs << projection_matrix.format(unaligned);
+    ofs.close();
+
+    ++current_image_index;
+  }
+
+  return current_image_index;
+}
+
+void WritePMVSOptions(const std::string& working_dir,
+                      const int num_images) {
+  std::ofstream ofs(working_dir + "/pmvs_options.txt");
+  ofs << "level " << FLAGS_level << std::endl;
+  ofs << "csize " << FLAGS_csize << std::endl;
+  ofs << "threshold 0.7" << std::endl;
+  ofs << "wsize 7" << std::endl;
+  ofs << "minImageNum " << FLAGS_minImageNum << std::endl;
+  ofs << "CPU " << FLAGS_CPU << std::endl;
+  ofs << "setEdge 0" << std::endl;
+  ofs << "useBound 0" << std::endl;
+  ofs << "useVisData 0" << std::endl;
+  ofs << "sequence -1" << std::endl;
+  ofs << "timages -1 0 " << num_images << std::endl;
+  ofs << "oimages 0" << std::endl;
+}
+
 int main(int argc, char *argv[]) {
   THEIA_GFLAGS_NAMESPACE::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
-
-  CHECK_GT(FLAGS_output_reconstruction.size(), 0)
-      << "Must specify a filepath to output the reconstruction.";
 
   const ReconstructionBuilderOptions options =
       SetReconstructionBuilderOptions();
 
   ReconstructionBuilder reconstruction_builder(options);
+  const std::string filepath_with_wildcard =
+      FLAGS_images_directory + "*." + FLAGS_images_extension;
   // If matches are provided, load matches otherwise load images.
   if (FLAGS_matches_file.size() != 0) {
     AddMatchesToReconstructionBuilder(&reconstruction_builder);
-  } else if (FLAGS_images.size() != 0) {
+  } else if (filepath_with_wildcard.size() != 0) {
     AddImagesToReconstructionBuilder(&reconstruction_builder);
   } else {
     LOG(FATAL)
@@ -397,9 +506,25 @@ int main(int argc, char *argv[]) {
       << "Could not create a reconstruction.";
 
   for (int i = 0; i < reconstructions.size(); i++) {
-    // Generate sparse point clouds
+    // Set up output subdirectory.
+    const std::string subdirectory =
+        theia::StringPrintf("%s%03d",
+                            FLAGS_output_directory.c_str(), i);
+    CreateDirectoryIfDoesNotExist(subdirectory);
+
+    const std::string pmvs_working_directory = subdirectory + "/pmvs";
+    CreateDirectoryIfDoesNotExist(pmvs_working_directory);
+    const std::string visualize_dir = pmvs_working_directory + "/visualize";
+    CreateDirectoryIfDoesNotExist(visualize_dir);
+    const std::string txt_dir = pmvs_working_directory + "/txt";
+    CreateDirectoryIfDoesNotExist(txt_dir);
+    const std::string models_dir = pmvs_working_directory + "/models";
+    CreateDirectoryIfDoesNotExist(models_dir);
+
+    // Generate sparse point clouds.
     const std::string reconstruction_file =
-        theia::StringPrintf("%s-%d",
+        theia::StringPrintf("%s/%s-%03d",
+                            subdirectory.c_str(),
                             FLAGS_output_reconstruction.c_str(), i);
     LOG(INFO)
         << "Writing reconstruction " << i
@@ -410,11 +535,32 @@ int main(int argc, char *argv[]) {
                        *reconstructions[i],
                        FLAGS_min_num_observations_per_point))
         << "Could not write out PLY file";
-    
+
+    // Export to NVM file.
+    const std::string nvm_file =
+	theia::StringPrintf("%s/%s-%03d.nvm",
+			    subdirectory.c_str(),
+			    FLAGS_output_reconstruction.c_str(), i);
+    CHECK(theia::WriteNVMFile(nvm_file, *reconstructions[i]))
+        << "Could not write NVM file.";
+
+    // Export to PMVS's format
+    const int num_cameras = WriteCamerasToPMVS(*reconstructions[i],
+                                               pmvs_working_directory);
+    WritePMVSOptions(pmvs_working_directory, num_cameras);
+
+    const std::string lists_file = pmvs_working_directory + "/list.txt";
+    const std::string bundle_file =
+        pmvs_working_directory + "/bundle.rd.out";
+    CHECK(theia::WriteBundlerFiles(*reconstructions[i],
+                                   lists_file,
+                                   bundle_file));
+
     // Generate sparse point clouds with color properties.
     const std::string reconstruction_file_with_color =
-        theia::StringPrintf("%s-%d",
-                            FLAGS_output_reconstruction_with_color.c_str(), i);
+        theia::StringPrintf("%s/%s-color-%03d",
+                            subdirectory.c_str(),
+                            FLAGS_output_reconstruction.c_str(), i);
     theia::ColorizeReconstruction(FLAGS_images_directory,
                                   FLAGS_num_threads,
                                   reconstructions[i]);
