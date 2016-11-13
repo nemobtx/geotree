@@ -28,7 +28,7 @@ struct AppSettings
     bool delete_scale = false;
     bool delete_conf = false;
     bool delete_colors = false;
-    float conf_threshold = 1.0f;
+    float conf_threshold = 0.0f;
     float conf_percentile = -1.0f;
     int component_size = 1000;
 };
