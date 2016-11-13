@@ -45,7 +45,7 @@ DEFINE_int32(csize, 2,
 DEFINE_int32(minImageNum, 3,
              "Minimum number of iamges that each 3D point must be visible "
              "for being reconstructed. 3 is suggested in general.");
-DEFINE_int32(CPU, 4, "Number of threads to use in PMVS.");
+DEFINE_int32(CPU, 4, "Number of CPU core in the machine.");
 
 // Multithreading.
 DEFINE_int32(num_threads, 1,
@@ -403,9 +403,9 @@ int WriteCamerasToPMVS(const theia::Reconstruction& reconstruction,
                        const std::string& working_dir) {
   const std::string filepath_with_wildcard =
       FLAGS_images_directory + "*." + FLAGS_images_extension;
-  const std::string txt_dir = working_dir + "/txt";
+  const std::string txt_dir = working_dir + "txt/";
   CreateDirectoryIfDoesNotExist(txt_dir);
-  const std::string visualize_dir = working_dir + "/visualize";
+  const std::string visualize_dir = working_dir + "visualize/";
 
   std::vector<std::string> image_files;
   CHECK(theia::GetFilepathsFromWildcard(filepath_with_wildcard, &image_files))
@@ -445,12 +445,12 @@ int WriteCamerasToPMVS(const theia::Reconstruction& reconstruction,
     // Copy the image into a jpeg format with the filename in the form of
     // %08d.jpg.
     const std::string new_image_file = theia::StringPrintf(
-        "%s/%08d.jpg", visualize_dir.c_str(), current_image_index);
+        "%s%08d.jpg", visualize_dir.c_str(), current_image_index);
     undistorted_image.Write(new_image_file);
 
     // Write the camera projection matrix.
     const std::string txt_file = theia::StringPrintf(
-        "%s/%08d.txt", txt_dir.c_str(), current_image_index);
+        "%s%08d.txt", txt_dir.c_str(), current_image_index);
     theia::Matrix3x4d projection_matrix;
     undistorted_camera.GetProjectionMatrix(&projection_matrix);
     std::ofstream ofs(txt_file);
@@ -466,7 +466,7 @@ int WriteCamerasToPMVS(const theia::Reconstruction& reconstruction,
 
 void WritePMVSOptions(const std::string& working_dir,
                       const int num_images) {
-  std::ofstream ofs(working_dir + "/pmvs_options.txt");
+  std::ofstream ofs(working_dir + "pmvs_options.txt");
   ofs << "level " << FLAGS_level << std::endl;
   ofs << "csize " << FLAGS_csize << std::endl;
   ofs << "threshold 0.7" << std::endl;
@@ -508,22 +508,22 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < reconstructions.size(); i++) {
     // Set up output subdirectory.
     const std::string subdirectory =
-        theia::StringPrintf("%s%03d",
+        theia::StringPrintf("%s%03d/",
                             FLAGS_output_directory.c_str(), i);
     CreateDirectoryIfDoesNotExist(subdirectory);
 
-    const std::string pmvs_working_directory = subdirectory + "/pmvs";
+    const std::string pmvs_working_directory = subdirectory + "pmvs/";
     CreateDirectoryIfDoesNotExist(pmvs_working_directory);
-    const std::string visualize_dir = pmvs_working_directory + "/visualize";
+    const std::string visualize_dir = pmvs_working_directory + "visualize/";
     CreateDirectoryIfDoesNotExist(visualize_dir);
-    const std::string txt_dir = pmvs_working_directory + "/txt";
+    const std::string txt_dir = pmvs_working_directory + "txt/";
     CreateDirectoryIfDoesNotExist(txt_dir);
-    const std::string models_dir = pmvs_working_directory + "/models";
+    const std::string models_dir = pmvs_working_directory + "models/";
     CreateDirectoryIfDoesNotExist(models_dir);
 
     // Generate sparse point clouds.
     const std::string reconstruction_file =
-        theia::StringPrintf("%s/%s-%03d",
+        theia::StringPrintf("%s%s-%03d",
                             subdirectory.c_str(),
                             FLAGS_output_reconstruction.c_str(), i);
     LOG(INFO)
@@ -536,29 +536,29 @@ int main(int argc, char *argv[]) {
                        FLAGS_min_num_observations_per_point))
         << "Could not write out PLY file";
 
-    // Export to NVM file.
+    // Export to NVM format.
     const std::string nvm_file =
-	theia::StringPrintf("%s/%s-%03d.nvm",
-			    subdirectory.c_str(),
-			    FLAGS_output_reconstruction.c_str(), i);
+	theia::StringPrintf("%s%s-%03d.nvm",
+			            subdirectory.c_str(),
+			            FLAGS_output_reconstruction.c_str(), i);
     CHECK(theia::WriteNVMFile(nvm_file, *reconstructions[i]))
         << "Could not write NVM file.";
 
-    // Export to PMVS's format
+    // Export to PMVS format
     const int num_cameras = WriteCamerasToPMVS(*reconstructions[i],
                                                pmvs_working_directory);
     WritePMVSOptions(pmvs_working_directory, num_cameras);
 
-    const std::string lists_file = pmvs_working_directory + "/list.txt";
+    const std::string lists_file = pmvs_working_directory + "list.txt";
     const std::string bundle_file =
-        pmvs_working_directory + "/bundle.rd.out";
+        pmvs_working_directory + "bundle.rd.out";
     CHECK(theia::WriteBundlerFiles(*reconstructions[i],
                                    lists_file,
                                    bundle_file));
 
     // Generate sparse point clouds with color properties.
     const std::string reconstruction_file_with_color =
-        theia::StringPrintf("%s/%s-color-%03d",
+        theia::StringPrintf("%s%s-color-%03d",
                             subdirectory.c_str(),
                             FLAGS_output_reconstruction.c_str(), i);
     theia::ColorizeReconstruction(FLAGS_images_directory,
