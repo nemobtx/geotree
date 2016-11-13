@@ -698,6 +698,7 @@ void CpatchOrganizerS::writePLY(const std::vector<Ppatch>& patches,
   ofstr.open(filename.c_str());
   ofstr << "ply" << '\n'
        << "format ascii 1.0" << '\n'
+       << "comment PMVS generated" << '\n'
        << "element vertex " << (int)patches.size() << '\n'
        << "property float x" << '\n'
        << "property float y" << '\n'
@@ -705,9 +706,12 @@ void CpatchOrganizerS::writePLY(const std::vector<Ppatch>& patches,
        << "property float nx" << '\n'
        << "property float ny" << '\n'
        << "property float nz" << '\n'
-       << "property uchar diffuse_red" << '\n'
-       << "property uchar diffuse_green" << '\n'
-       << "property uchar diffuse_blue" << '\n'
+       << "property uchar red" << '\n'
+       << "property uchar green" << '\n'
+       << "property uchar blue" << '\n'
+       << "property uchar alpha" << '\n'
+       << "elenment face 0" << '\n'
+       << "property list uchar int vertex_indices" << '\n'
        << "end_header" << '\n';
 
   vector<Ppatch>::const_iterator bpatch = patches.begin();
@@ -775,7 +779,8 @@ void CpatchOrganizerS::writePLY(const std::vector<Ppatch>& patches,
           << (*bpatch)->m_normal[0] << ' '
           << (*bpatch)->m_normal[1] << ' '
           << (*bpatch)->m_normal[2] << ' '
-          << color[0] << ' ' << color[1] << ' ' << color[2] << '\n';
+          << color[0] << ' ' << color[1] << ' ' << color[2] << ' '
+          << "255" << '\n';
       ++bpatch;
   }
   ofstr.close();  
@@ -788,6 +793,7 @@ void CpatchOrganizerS::writePLY(const std::vector<Ppatch>& patches,
   ofstr.open(filename.c_str());
   ofstr << "ply" << '\n'
        << "format ascii 1.0" << '\n'
+       << "comment PMVS generated" << '\n'
        << "element vertex " << (int)patches.size() << '\n'
        << "property float x" << '\n'
        << "property float y" << '\n'
@@ -795,9 +801,12 @@ void CpatchOrganizerS::writePLY(const std::vector<Ppatch>& patches,
        << "property float nx" << '\n'
        << "property float ny" << '\n'
        << "property float nz" << '\n'
-       << "property uchar diffuse_red" << '\n'
-       << "property uchar diffuse_green" << '\n'
-       << "property uchar diffuse_blue" << '\n'
+       << "property uchar red" << '\n'
+       << "property uchar green" << '\n'
+       << "property uchar blue" << '\n'
+       << "property uchar alpha" << '\n'
+       << "elenment face 0" << '\n'
+       << "property list uchar int vertex_indices" << '\n'
        << "end_header" << '\n';
 
   vector<Ppatch>::const_iterator bpatch = patches.begin();
@@ -811,7 +820,7 @@ void CpatchOrganizerS::writePLY(const std::vector<Ppatch>& patches,
           << (*bpatch)->m_normal[0] << ' '
           << (*bpatch)->m_normal[1] << ' '
           << (*bpatch)->m_normal[2] << ' '
-          << *colorb << '\n';
+          << *colorb << ' ' << "255" << '\n';
     ++bpatch;
     ++colorb;
   }
