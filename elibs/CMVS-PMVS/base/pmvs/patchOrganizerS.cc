@@ -710,7 +710,7 @@ void CpatchOrganizerS::writePLY(const std::vector<Ppatch>& patches,
        << "property uchar green" << '\n'
        << "property uchar blue" << '\n'
        << "property uchar alpha" << '\n'
-       << "elenment face 0" << '\n'
+       << "element face 0" << '\n'
        << "property list uchar int vertex_indices" << '\n'
        << "end_header" << '\n';
 
@@ -805,7 +805,7 @@ void CpatchOrganizerS::writePLY(const std::vector<Ppatch>& patches,
        << "property uchar green" << '\n'
        << "property uchar blue" << '\n'
        << "property uchar alpha" << '\n'
-       << "elenment face 0" << '\n'
+       << "element face 0" << '\n'
        << "property list uchar int vertex_indices" << '\n'
        << "end_header" << '\n';
 
