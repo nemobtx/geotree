@@ -45,8 +45,8 @@ int main(int argc, char* argv[]) {
   findMatch.run();
 
   bool bExportPLY = true;
-  bool bExportPatch = false;
-  bool bExportPSet = false;
+  bool bExportPatch = true;
+  bool bExportPSet = true;
 
   for (int i=3; i < argc; ++i)
   {
